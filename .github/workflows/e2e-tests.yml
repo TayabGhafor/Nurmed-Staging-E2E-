@@ -5,7 +5,7 @@ name: E2E Tests (Scheduled)
 # Also runs on pushes to main that touch test files.
 on:
   schedule:
-    - cron: '*/30 * * * *' # Every 30 minutes
+    - cron: '*/10 * * * *' # Every 10 minutes
   workflow_dispatch:
     inputs:
       test_suite:
@@ -18,6 +18,7 @@ on:
           - login
           - session
           - validation
+          - e2e
   push:
     branches: [main]
     paths:
@@ -98,7 +99,7 @@ jobs:
 
       # ── Run data validation tests ───────────────────────────────────
       - name: Run Data Validation Tests
-        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'validation' || github.event_name == 'schedule' }}
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'validation' || github.event_name == 'schedule' || github.event_name == 'push' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -108,6 +109,19 @@ jobs:
           SESSION_TEMPLATE: ${{ secrets.SESSION_TEMPLATE || 'OPDLHR18' }}
         run: |
           pnpm exec playwright test --project=data-validation \
+            --reporter=list
+
+      # ── Run E2E UI tests ────────────────────────────────────────────
+      - name: Run E2E UI Tests
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'e2e' || github.event_name == 'schedule' || github.event_name == 'push' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          STG_API_URL: ${{ env.STG_API_URL }}
+        run: |
+          pnpm exec playwright test --project=e2e \
             --reporter=list
 
       # ── Upload test results ─────────────────────────────────────────
