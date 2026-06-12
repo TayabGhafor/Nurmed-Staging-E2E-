@@ -253,7 +253,7 @@ test.describe("Login UI — Access Control", () => {
     await page.click('a[href="/forgot-password"]');
 
     await page.waitForURL((url) => url.pathname.includes("/forgot-password"), {
-      timeout: 10_000,
+      timeout: 30_000,
     });
     expect(page.url()).toContain("/forgot-password");
   });

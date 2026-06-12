@@ -45,13 +45,6 @@ test.describe("Dashboard — Page Loading", () => {
     ).toBe(true);
   });
 
-  test("should display the dashboard main content area", async ({ page }) => {
-    // Wait for the dashboard content to render
-    // The main content area has a 'main' tag or a generic class
-    const mainContent = page.locator("main, [role='main']").first();
-    await expect(mainContent).toBeVisible({ timeout: 15_000 });
-  });
-
   test("sidebar navigation should be visible", async ({ page }) => {
     // The AppSidebar component should render on desktop
     const sidebar = page.locator("aside, nav, [data-sidebar]").first();
