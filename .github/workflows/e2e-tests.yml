@@ -41,6 +41,12 @@ concurrency:
 env:
   STG_API_URL: https://stg-api.nurmed.ai/api/v1
   NODE_VERSION: '20'
+  SUPABASE_URL: ${{ secrets['SUPABASE_URL'] }}
+  SUPABASE_ANON_KEY: ${{ secrets['SUPABASE_ANON_KEY'] }}
+  TEST_EMAIL: ${{ secrets['TEST_EMAIL'] }}
+  TEST_PASSWORD: ${{ secrets['TEST_PASSWORD'] }}
+  SESSION_TEMPLATE: ${{ secrets['SESSION_TEMPLATE'] || 'OPDLHR18' }}
+  SLACK_WEBHOOK_URL: ${{ secrets['SLACK_WEBHOOK_URL'] }}
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
@@ -73,12 +79,6 @@ jobs:
 
       # ── Run login API tests ──────────────────────────────────────────
       - name: Run Login API Tests
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          STG_API_URL: ${{ env.STG_API_URL }}
         run: |
           pnpm exec playwright test --project=api tests/api/login.spec.ts \
             --reporter=list
@@ -86,13 +86,6 @@ jobs:
       # ── Run session lifecycle API tests ──────────────────────────────
       - name: Run Session Lifecycle Tests
         if: ${{ github.event.inputs.test_suite != 'login' }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          STG_API_URL: ${{ env.STG_API_URL }}
-          SESSION_TEMPLATE: ${{ secrets.SESSION_TEMPLATE || 'OPDLHR18' }}
         run: |
           pnpm exec playwright test --project=api tests/api/session-lifecycle.spec.ts \
             --reporter=list
@@ -100,13 +93,6 @@ jobs:
       # ── Run data validation tests ───────────────────────────────────
       - name: Run Data Validation Tests
         if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'validation' || github.event_name == 'schedule' || github.event_name == 'push' }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          STG_API_URL: ${{ env.STG_API_URL }}
-          SESSION_TEMPLATE: ${{ secrets.SESSION_TEMPLATE || 'OPDLHR18' }}
         run: |
           pnpm exec playwright test --project=data-validation \
             --reporter=list
@@ -114,12 +100,6 @@ jobs:
       # ── Run E2E UI tests ────────────────────────────────────────────
       - name: Run E2E UI Tests
         if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'e2e' || github.event_name == 'schedule' || github.event_name == 'push' }}
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          STG_API_URL: ${{ env.STG_API_URL }}
         run: |
           pnpm exec playwright test --project=e2e \
             --reporter=list
@@ -156,8 +136,6 @@ jobs:
       # ── Slack notification ──────────────────────────────────────────
       - name: Send Slack Notification
         if: env.SLACK_WEBHOOK_URL != ''
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         uses: slackapi/slack-github-action@v2.1.0
         with:
           webhook: ${{ env.SLACK_WEBHOOK_URL }}
