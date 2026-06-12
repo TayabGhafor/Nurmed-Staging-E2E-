@@ -45,14 +45,11 @@ test.describe("Dashboard — Page Loading", () => {
     ).toBe(true);
   });
 
-  test("should display 'Create New Recording' heading", async ({ page }) => {
+  test("should display the dashboard main content area", async ({ page }) => {
     // Wait for the dashboard content to render
-    const heading = page.locator("h3", { hasText: "Create New Recording" });
-
-    // The heading might not appear if the user is a hospital admin
-    // So we check for either the heading or the dashboard layout
-    const dashboardContent = page.locator("h3").first();
-    await expect(dashboardContent).toBeVisible({ timeout: 15_000 });
+    // The main content area has a 'main' tag or a generic class
+    const mainContent = page.locator("main, [role='main']").first();
+    await expect(mainContent).toBeVisible({ timeout: 15_000 });
   });
 
   test("sidebar navigation should be visible", async ({ page }) => {

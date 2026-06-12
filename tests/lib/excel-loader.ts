@@ -284,6 +284,7 @@ export function matchExtractedTerms(
     if (!bestMatch) {
       for (const icd of icdCodes) {
         const normDesc = normalize(icd.description);
+        if (!normDesc) continue;
         if (
           normDesc.includes(normTerm) ||
           normTerm.includes(normDesc)
@@ -305,6 +306,7 @@ export function matchExtractedTerms(
     if (!bestMatch) {
       for (const sn of snomedCodes) {
         const normSn = normalize(sn.term);
+        if (!normSn) continue;
         if (normSn.includes(normTerm) || normTerm.includes(normSn)) {
           bestMatch = {
             extractedTerm: term,
