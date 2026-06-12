@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fake EHR — Nurmed embed test</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        margin: 0;
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      header {
+        padding: 16px 20px;
+        background: #1e293b;
+        border-bottom: 1px solid #334155;
+      }
+      header h1 {
+        font-size: 16px;
+        margin: 0 0 4px;
+      }
+      header p {
+        font-size: 12px;
+        margin: 0;
+        color: #94a3b8;
+      }
+      .bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        padding: 12px 20px;
+        background: #111827;
+        border-bottom: 1px solid #334155;
+      }
+      .bar label {
+        font-size: 12px;
+        color: #94a3b8;
+      }
+      .bar input {
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #334155;
+        background: #0b1220;
+        color: #e2e8f0;
+        font-size: 13px;
+      }
+      #base {
+        width: 260px;
+      }
+      #token {
+        width: 420px;
+      }
+      #params {
+        width: 260px;
+      }
+      .bar button {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: 0;
+        background: #2563eb;
+        color: white;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .bar button:hover {
+        background: #1d4ed8;
+      }
+      #src {
+        font-size: 11px;
+        color: #64748b;
+        padding: 6px 20px;
+        word-break: break-all;
+      }
+      .frame-wrap {
+        padding: 20px;
+      }
+      iframe {
+        width: 100%;
+        height: 78vh;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        background: white;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🏥 Fake Hospital EHR</h1>
+      <p>
+        Simulates a hospital EHR embedding a logged-in Nurmed session in an
+        iframe. This page is intentionally served from a DIFFERENT origin
+        (localhost:8081) than Nurmed, so it is a real cross-site test.
+      </p>
+    </header>
+
+    <div class="bar">
+      <label>
+        Nurmed base URL
+        <input id="base" placeholder="https://staging.nurmed.ai" />
+      </label>
+      <label>
+        Embed token (NONCE)
+        <input id="token" placeholder="paste the token from /auth/embed-link" />
+      </label>
+      <label>
+        Extra params
+        <input id="params" placeholder="key=value&foo=bar" />
+      </label>
+      <button id="open">Open Nurmed in iframe →</button>
+    </div>
+
+    <div id="src"></div>
+
+    <div class="frame-wrap">
+      <!--
+        allow="microphone; camera" delegates these capabilities to the
+        cross-origin Nurmed iframe. Without it, getUserMedia() inside the
+        iframe rejects with NotAllowedError even after the user grants the
+        mic prompt. The real EHR's <iframe> MUST carry the same attribute.
+      -->
+      <iframe
+        id="frame"
+        title="Nurmed embedded"
+        allow="microphone; camera"
+      ></iframe>
+    </div>
+
+    <script>
+      // Remember the base URL between runs (the token is single-use, so it isn't saved).
+      const baseInput = document.getElementById("base");
+      const tokenInput = document.getElementById("token");
+      const paramsInput = document.getElementById("params");
+      const frame = document.getElementById("frame");
+      const srcEl = document.getElementById("src");
+
+      baseInput.value =
+        localStorage.getItem("nurmed_embed_base") || "https://staging.nurmed.ai";
+      paramsInput.value = localStorage.getItem("nurmed_embed_params") || "";
+
+      document.getElementById("open").addEventListener("click", () => {
+        const base = baseInput.value.trim().replace(/\/$/, "");
+        const token = tokenInput.value.trim();
+        const params = paramsInput.value.trim().replace(/^[?&]/, "");
+        if (!base || !token) {
+          alert("Enter both the Nurmed base URL and the embed token.");
+          return;
+        }
+        localStorage.setItem("nurmed_embed_base", base);
+        localStorage.setItem("nurmed_embed_params", params);
+        let url = `${base}/embed?token=${encodeURIComponent(token)}`;
+        if (params) {
+          url += `&${params}`;
+        }
+        srcEl.textContent = "iframe src = " + url;
+        frame.src = url;
+      });
+    </script>
+  </body>
+</html>

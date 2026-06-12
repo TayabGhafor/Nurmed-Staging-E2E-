@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Session-02</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+    .nav { margin-bottom: 20px; }
+    .nav a { color: #2563eb; }
+    .summary { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 12px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f9fafb; }
+    .field-card, .clinical-block { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px; }
+    .clinical-text { white-space: pre-wrap; background: #f8fafc; padding: 12px; border-radius: 6px; font-size: 14px; }
+    table.datasets { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    table.datasets th, table.datasets td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+    table.datasets th { background: #f9fafb; }
+    h1, h2, h3 { margin-top: 0; }
+    .pass { color: #16a34a; }
+    .fail { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <p class="nav"><a href="index.html">← All reports</a></p>
+  <h1>Session-02</h1>
+  
+  <div class="summary">
+    <div class="card"><strong>Session name</strong><div>Session-02</div></div>
+    <div class="card"><strong>Session ID</strong><div>1</div></div>
+    <div class="card"><strong>MRN</strong><div>E2E-test</div></div>
+    <div class="card"><strong>Template</strong><div>OPD (Outpatient)</div></div>
+    <div class="card"><strong>Audio File (random)</strong><div>Session-02.mp3</div></div>
+    <div class="card"><strong>Audio Folder</strong><div><code>testdata/audio</code></div></div>
+    <div class="card"><strong>Final Status</strong><div>Completed</div></div>
+    <div class="card"><strong>Polling Attempts</strong><div>0</div></div>
+    <div class="card"><strong>Total Extracted</strong><div>0</div></div>
+    <div class="card"><strong>Total Matched</strong><div>0</div></div>
+    <div class="card"><strong>Total Unmatched</strong><div>0</div></div>
+    <div class="card"><strong>Overall Accuracy</strong><div>0%</div></div>
+  </div>
+
+  <h2 class="pass">Validation PASSED</h2>
+  <p><em>Unit test sample</em></p>
+  
+
+  <h2>Reference datasets (docs/Data)</h2>
+  <table class="datasets">
+    <thead><tr><th>File</th><th>Path</th><th>Status</th><th>Entries used</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Clinical text extracted from session</h2>
+  
+      <section class="clinical-block">
+        <h3>Chief Complaint — extracted from session</h3>
+        <pre class="clinical-text">(empty)</pre>
+      </section>
+      <section class="clinical-block">
+        <h3>Physical Examination — extracted from session</h3>
+        <pre class="clinical-text">(empty)</pre>
+      </section>
+      <section class="clinical-block">
+        <h3>Review Of Systems — extracted from session</h3>
+        <pre class="clinical-text">(empty)</pre>
+      </section>
+      <section class="clinical-block">
+        <h3>Diagnosis — extracted from session</h3>
+        <pre class="clinical-text">(empty)</pre>
+      </section>
+
+  <h2>SNOMED / ICD matching by field</h2>
+  <p><em>No field-level validation (run did not reach clinical extraction).</em></p>
+</body>
+</html>

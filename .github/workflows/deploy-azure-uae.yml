@@ -1,0 +1,104 @@
+name: Deploy Frontend to Azure (UAE North)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: nurmed-uaen-prod-rg
+  CONTAINER_APP_NAME: nurmed-frontend-uaen-prod
+  ACR_NAME: nurmedacruaenprodhqcrxk
+  ACR_LOGIN_SERVER: nurmedacruaenprodhqcrxk.azurecr.io
+  ACR_REPO: nurmed-frontend
+
+permissions:
+  id-token: write   # required for azure/login OIDC
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: frontend-uae-azure
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Docker login to ACR
+        run: az acr login -n "$ACR_NAME"
+
+      # Public Next.js build args. Non-secret values come from repo Variables;
+      # the publishable key + encryption key come from Secrets (still inlined
+      # into the client bundle — see notes in the deploy README).
+      - name: Verify build inputs
+        run: |
+          set -euo pipefail
+          require_var() {
+            if [ -z "${!1:-}" ]; then echo "missing $1"; exit 1; fi
+            echo "$1=${!1}"
+          }
+          NEXT_PUBLIC_API_BASE_URL='${{ vars.NEXT_PUBLIC_API_BASE_URL }}'             require_var NEXT_PUBLIC_API_BASE_URL
+          NEXT_PUBLIC_SITE_URL='${{ vars.NEXT_PUBLIC_SITE_URL }}'                     require_var NEXT_PUBLIC_SITE_URL
+          NEXT_PUBLIC_SUPABASE_URL='${{ vars.NEXT_PUBLIC_SUPABASE_URL }}'             require_var NEXT_PUBLIC_SUPABASE_URL
+          NEXT_PUBLIC_REGION='${{ vars.NEXT_PUBLIC_REGION }}'                         require_var NEXT_PUBLIC_REGION
+          NEXT_PUBLIC_AZURE_SPEECH_REGION='${{ vars.NEXT_PUBLIC_AZURE_SPEECH_REGION }}' require_var NEXT_PUBLIC_AZURE_SPEECH_REGION
+          # Secrets — print only that they're set, not values.
+          [ -n '${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}' ] || { echo "missing NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"; exit 1; }
+          [ -n '${{ secrets.NEXT_PUBLIC_ENCRYPTION_KEY }}' ]           || { echo "missing NEXT_PUBLIC_ENCRYPTION_KEY"; exit 1; }
+          [ -n '${{ secrets.NEXT_PUBLIC_AZURE_SPEECH_KEY }}' ]         || { echo "missing NEXT_PUBLIC_AZURE_SPEECH_KEY"; exit 1; }
+          [ -n '${{ secrets.NEXT_PUBLIC_SONIOX_API_KEY }}' ]           || { echo "missing NEXT_PUBLIC_SONIOX_API_KEY"; exit 1; }
+          echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<set>"
+          echo "NEXT_PUBLIC_ENCRYPTION_KEY=<set>"
+          echo "NEXT_PUBLIC_AZURE_SPEECH_KEY=<set>"
+          echo "NEXT_PUBLIC_SONIOX_API_KEY=<set>"
+
+      - name: Build & push image
+        id: build
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO}:${IMAGE_TAG}"
+          docker build \
+            --build-arg NEXT_PUBLIC_API_BASE_URL='${{ vars.NEXT_PUBLIC_API_BASE_URL }}' \
+            --build-arg NEXT_PUBLIC_SITE_URL='${{ vars.NEXT_PUBLIC_SITE_URL }}' \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL='${{ vars.NEXT_PUBLIC_SUPABASE_URL }}' \
+            --build-arg NEXT_PUBLIC_REGION='${{ vars.NEXT_PUBLIC_REGION }}' \
+            --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}' \
+            --build-arg NEXT_PUBLIC_ENCRYPTION_KEY='${{ secrets.NEXT_PUBLIC_ENCRYPTION_KEY }}' \
+            --build-arg NEXT_PUBLIC_AZURE_SPEECH_KEY='${{ secrets.NEXT_PUBLIC_AZURE_SPEECH_KEY }}' \
+            --build-arg NEXT_PUBLIC_AZURE_SPEECH_REGION='${{ vars.NEXT_PUBLIC_AZURE_SPEECH_REGION }}' \
+            --build-arg NEXT_PUBLIC_SONIOX_API_KEY='${{ secrets.NEXT_PUBLIC_SONIOX_API_KEY }}' \
+            -t "$IMAGE" \
+            -t "${ACR_LOGIN_SERVER}/${ACR_REPO}:latest" \
+            .
+          docker push "$IMAGE"
+          docker push "${ACR_LOGIN_SERVER}/${ACR_REPO}:latest"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Update Container App
+        run: |
+          az containerapp update \
+            -n "$CONTAINER_APP_NAME" \
+            -g "$AZURE_RESOURCE_GROUP" \
+            --image "${{ steps.build.outputs.image }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Frontend deploy"
+            echo ""
+            echo "- Branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Image:  \`${{ steps.build.outputs.image }}\`"
+            echo "- App:    \`${CONTAINER_APP_NAME}\` (rg: \`${AZURE_RESOURCE_GROUP}\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
