@@ -1,0 +1,80 @@
+name: API Quick Check
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: api-quick-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  STG_API_URL: ${{ secrets.STG_API_URL || 'https://stg-api.nurmed.ai/api/v1' }}
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+  TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+  TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+  SESSION_TEMPLATE: ${{ secrets.SESSION_TEMPLATE || 'OPDLHR18' }}
+  PLAYWRIGHT_SKIP_WEBSERVER: "1"
+
+jobs:
+  api-quick-check:
+    name: Run Quick API Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run quick API coverage suite
+        run: pnpm test:api:quick
+
+      - name: Publish API health summary
+        if: always()
+        run: |
+          if [ -f testResults/api-health.md ]; then
+            cat testResults/api-health.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## API Quick Check Summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Report file was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload API health artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-quick-check-${{ github.run_number }}
+          path: |
+            testResults/api-health.json
+            testResults/api-health.md
+            testResults/api-health.html
+            testResults/api-response-log.txt
+            test-results.json
+            playwright-report/
+          retention-days: 30

@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 // Load .env from project root so tests can use the same env vars as the app.
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
+const shouldStartWebServer = !process.env.PLAYWRIGHT_SKIP_WEBSERVER;
+
 /**
  * Playwright configuration for NurMed E2E tests.
  *
@@ -65,11 +67,13 @@ export default defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: "pnpm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  /* Run the local dev server only for suites that need the app runtime */
+  webServer: shouldStartWebServer
+    ? {
+        command: "pnpm run dev",
+        url: "http://localhost:3000",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }
+    : undefined,
 });
