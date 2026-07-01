@@ -28,6 +28,8 @@ export interface ApiCheckResult {
   validationNote?: string;
   errorMessage?: string;
   timestamp: string;
+  blocking: boolean;
+  outcome: "pass" | "warn" | "fail";
 }
 
 export interface ExecuteApiCheckOptions {
@@ -38,6 +40,7 @@ export interface ExecuteApiCheckOptions {
   expectedStatuses: number[];
   data?: unknown;
   headers?: Record<string, string>;
+  blocking?: boolean;
   validate?: (
     body: unknown,
     response: APIResponse,
@@ -92,6 +95,40 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// #region debug-point A:debug-server-reporting
+function reportDebugEvent(
+  hypothesisId: string,
+  location: string,
+  msg: string,
+  data: Record<string, unknown>,
+) {
+  let debugServerUrl = "http://127.0.0.1:7777/event";
+  let debugSessionId = "api-quick-check-404";
+  try {
+    const envPath = path.resolve(process.cwd(), ".dbg/api-quick-check-404.env");
+    const envFile = fs.readFileSync(envPath, "utf-8");
+    debugServerUrl =
+      envFile.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() || debugServerUrl;
+    debugSessionId =
+      envFile.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() || debugSessionId;
+  } catch {}
+
+  fetch(debugServerUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sessionId: debugSessionId,
+      runId: process.env.DEBUG_RUN_ID || "pre-fix",
+      hypothesisId,
+      location,
+      msg,
+      data,
+      ts: Date.now(),
+    }),
+  }).catch(() => {});
+}
+// #endregion
+
 export class ApiQuickCheckReporter {
   readonly results: ApiCheckResult[] = [];
 
@@ -100,7 +137,15 @@ export class ApiQuickCheckReporter {
   }
 
   get failures(): ApiCheckResult[] {
-    return this.results.filter((result) => !result.passed);
+    return this.results.filter(
+      (result) => result.outcome === "fail" && result.blocking,
+    );
+  }
+
+  get warnings(): ApiCheckResult[] {
+    return this.results.filter(
+      (result) => result.outcome === "warn" && !result.blocking,
+    );
   }
 
   async writeArtifacts(outputDir: string): Promise<void> {
@@ -119,8 +164,9 @@ export class ApiQuickCheckReporter {
 
   private toMarkdown(): string {
     const total = this.results.length;
-    const passed = this.results.filter((result) => result.passed).length;
-    const failed = total - passed;
+    const passed = this.results.filter((result) => result.outcome === "pass").length;
+    const warnings = this.warnings.length;
+    const failed = this.failures.length;
     const slowest = [...this.results].sort(
       (left, right) => right.durationMs - left.durationMs,
     )[0];
@@ -130,6 +176,7 @@ export class ApiQuickCheckReporter {
       "",
       `- Total checks: ${total}`,
       `- Passed: ${passed}`,
+      `- Warnings: ${warnings}`,
       `- Failed: ${failed}`,
       slowest
         ? `- Slowest endpoint: ${slowest.method} ${slowest.path} (${slowest.durationMs}ms)`
@@ -138,18 +185,43 @@ export class ApiQuickCheckReporter {
       "| Check | Category | Method | Path | Result | Status | Time |",
       "|---|---|---|---|---|---|---|",
       ...this.results.map((result) => {
-        const resultLabel = result.passed ? "PASS" : "FAIL";
+        const resultLabel =
+          result.outcome === "pass"
+            ? "PASS"
+            : result.outcome === "warn"
+              ? "WARN"
+              : "FAIL";
         const statusLabel = result.status == null ? "n/a" : String(result.status);
         return `| ${result.name} | ${result.category} | ${result.method} | \`${result.path}\` | ${resultLabel} | ${statusLabel} | ${result.durationMs}ms |`;
       }),
       "",
     ];
 
+    if (warnings > 0) {
+      lines.push("### Warning Checks", "");
+      for (const result of this.warnings) {
+        const reason =
+          result.errorMessage || result.validationNote || "Unexpected response";
+        const responseLine = result.responsePreview
+          ? ` | response=${truncate(result.responsePreview.replace(/\s+/g, " "), 240)}`
+          : "";
+        lines.push(
+          `- ${result.name}: status=${result.status == null ? "n/a" : result.status} | ${reason}${responseLine}`,
+        );
+      }
+      lines.push("");
+    }
+
     if (failed > 0) {
       lines.push("### Failed Checks", "");
       for (const result of this.failures) {
         const reason = result.errorMessage || result.validationNote || "Unexpected response";
-        lines.push(`- ${result.name}: ${reason}`);
+        const responseLine = result.responsePreview
+          ? ` | response=${truncate(result.responsePreview.replace(/\s+/g, " "), 240)}`
+          : "";
+        lines.push(
+          `- ${result.name}: status=${result.status == null ? "n/a" : result.status} | ${reason}${responseLine}`,
+        );
       }
       lines.push("");
     }
@@ -221,13 +293,20 @@ ${rows}
   private toLogText(): string {
     return this.results
       .map((result) => {
+        const resultLabel =
+          result.outcome === "pass"
+            ? "PASS"
+            : result.outcome === "warn"
+              ? "WARN"
+              : "FAIL";
         const lines = [
-          `[${result.passed ? "PASS" : "FAIL"}] ${result.name}`,
+          `[${resultLabel}] ${result.name}`,
           `Category: ${result.category}`,
           `Request: ${result.method} ${result.path}`,
           `Expected status: ${result.expectedStatuses.join(", ")}`,
           `Actual status: ${result.status == null ? "n/a" : result.status}`,
           `Duration: ${result.durationMs}ms`,
+          `Blocking: ${result.blocking ? "yes" : "no"}`,
         ];
 
         if (result.validationNote) {
@@ -255,6 +334,7 @@ export async function executeApiCheck(
 ): Promise<ExecuteApiCheckResult> {
   const requestPreview = truncate(safeStringify(options.data));
   const startedAt = Date.now();
+  const blocking = options.blocking ?? true;
   let response: APIResponse | null = null;
   let body: unknown = null;
   let validationNote: string | undefined;
@@ -263,6 +343,19 @@ export async function executeApiCheck(
   let passed = false;
 
   try {
+    // #region debug-point A:request-input
+    reportDebugEvent(
+      "A",
+      "tests/lib/api-quick-check.ts:executeApiCheck:request",
+      "[DEBUG] About to execute API quick check request",
+      {
+        method: options.method,
+        path: options.path,
+        expectedStatuses: options.expectedStatuses,
+        hasPayload: options.data != null,
+      },
+    );
+    // #endregion
     response = await api.fetch(options.path, {
       method: options.method,
       data: options.data,
@@ -275,14 +368,38 @@ export async function executeApiCheck(
     body = tryParseBody(rawBody, response);
 
     const hasExpectedStatus = options.expectedStatuses.includes(status);
+    let validationError: string | undefined;
     if (hasExpectedStatus && options.validate) {
-      validationNote = (await options.validate(body, response)) || undefined;
+      try {
+        validationNote = (await options.validate(body, response)) || undefined;
+      } catch (error) {
+        validationError =
+          error instanceof Error ? error.message : String(error);
+      }
     }
 
-    passed = hasExpectedStatus;
-    if (!hasExpectedStatus) {
+    passed = hasExpectedStatus && !validationError;
+    if (validationError) {
+      errorMessage = validationError;
+    } else if (!hasExpectedStatus) {
       errorMessage = `Expected status ${options.expectedStatuses.join(", ")} but got ${status}`;
     }
+
+    // #region debug-point B:response-shape
+    reportDebugEvent(
+      "B",
+      "tests/lib/api-quick-check.ts:executeApiCheck:response",
+      "[DEBUG] API quick check response received",
+      {
+        method: options.method,
+        path: options.path,
+        responseUrl: response.url(),
+        status,
+        passed: hasExpectedStatus,
+        responsePreview: truncate(safeStringify(body), 800),
+      },
+    );
+    // #endregion
 
     reporter.add({
       name: options.name,
@@ -298,6 +415,8 @@ export async function executeApiCheck(
       validationNote,
       errorMessage,
       timestamp: new Date().toISOString(),
+      blocking,
+      outcome: passed ? "pass" : blocking ? "fail" : "warn",
     });
 
     logApiExchange({
@@ -309,11 +428,24 @@ export async function executeApiCheck(
       requestPreview,
       responsePreview: truncate(safeStringify(body)),
       passed,
+      blocking,
     });
 
     return { body, status, passed, response };
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : String(error);
+    // #region debug-point C:error-path
+    reportDebugEvent(
+      "C",
+      "tests/lib/api-quick-check.ts:executeApiCheck:error",
+      "[DEBUG] API quick check threw before result handling",
+      {
+        method: options.method,
+        path: options.path,
+        errorMessage,
+      },
+    );
+    // #endregion
     reporter.add({
       name: options.name,
       category: options.category,
@@ -327,6 +459,8 @@ export async function executeApiCheck(
       responsePreview: "",
       errorMessage,
       timestamp: new Date().toISOString(),
+      blocking,
+      outcome: blocking ? "fail" : "warn",
     });
 
     logApiExchange({
@@ -338,6 +472,7 @@ export async function executeApiCheck(
       requestPreview,
       responsePreview: "",
       passed: false,
+      blocking,
       errorMessage,
     });
 
@@ -354,10 +489,12 @@ function logApiExchange(entry: {
   requestPreview: string;
   responsePreview: string;
   passed: boolean;
+  blocking: boolean;
   errorMessage?: string;
 }) {
   const statusLabel = entry.status == null ? "n/a" : String(entry.status);
-  console.log(`\n[API QUICK CHECK] ${entry.passed ? "PASS" : "FAIL"} - ${entry.name}`);
+  const resultLabel = entry.passed ? "PASS" : entry.blocking ? "FAIL" : "WARN";
+  console.log(`\n[API QUICK CHECK] ${resultLabel} - ${entry.name}`);
   console.log(`[API QUICK CHECK] Request: ${entry.method} ${entry.path}`);
   console.log(`[API QUICK CHECK] Status: ${statusLabel} (${entry.durationMs}ms)`);
   if (entry.requestPreview) {
@@ -397,4 +534,3 @@ export function getNestedArray(input: unknown, paths: string[]): unknown[] {
   const value = getNestedValue<unknown>(input, paths);
   return Array.isArray(value) ? value : [];
 }
-

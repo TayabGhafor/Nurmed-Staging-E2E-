@@ -79,6 +79,8 @@ jobs:
 
       # ── Run login API tests ──────────────────────────────────────────
       - name: Run Login API Tests
+        env:
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
         run: |
           pnpm exec playwright test --project=api tests/api/login.spec.ts \
             --reporter=list
@@ -86,6 +88,8 @@ jobs:
       # ── Run session lifecycle API tests ──────────────────────────────
       - name: Run Session Lifecycle Tests
         if: ${{ github.event.inputs.test_suite != 'login' }}
+        env:
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
         run: |
           pnpm exec playwright test --project=api tests/api/session-lifecycle.spec.ts \
             --reporter=list
@@ -93,6 +97,8 @@ jobs:
       # ── Run data validation tests ───────────────────────────────────
       - name: Run Data Validation Tests
         if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'validation' || github.event_name == 'schedule' || github.event_name == 'push' }}
+        env:
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
         run: |
           pnpm exec playwright test --project=data-validation \
             --reporter=list
